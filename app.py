@@ -15,16 +15,16 @@ def load_pickle(filename):
     with open(path, 'rb') as f:
         return pickle.load(f)
 
-# Load pickle artifacts safely
+# Load native Python models safely
 try:
-    popular_df = load_pickle('popular.pkl')
-    pt = load_pickle('pt.pkl')
+    popular_data = load_pickle('popular.pkl')
+    pt_titles = load_pickle('pt.pkl')
     books_file = 'books.pkl' if os.path.exists(os.path.join(BASE_DIR, 'books.pkl')) else 'book.pkl'
-    books = load_pickle(books_file)
+    books_dict = load_pickle(books_file)
     similarity_scores = load_pickle('similarity_scores.pkl')
-    print("All pickle models loaded successfully.")
+    print("Native Python models loaded successfully.")
 except Exception as e:
-    print(f"CRITICAL ERROR loading pickle files: {e}", file=sys.stderr)
+    print(f"CRITICAL ERROR loading model files: {e}", file=sys.stderr)
     raise e
 
 def get_hd_image(url):
@@ -42,22 +42,16 @@ def get_hd_image(url):
 
 @app.route('/')
 def index():
-    if 'Image-URL-L' in popular_df.columns:
-        raw_imgs = popular_df['Image-URL-L'].values
-    elif 'Image-URL-M' in popular_df.columns:
-        raw_imgs = popular_df['Image-URL-M'].values
-    else:
-        raw_imgs = [''] * len(popular_df)
-        
+    raw_imgs = popular_data.get('image', [])
     images = [get_hd_image(img) for img in raw_imgs]
     
     return render_template(
         'index.html',
-        book_name=list(popular_df['Book-Title'].values),
-        author=list(popular_df['Book-Author'].values),
+        book_name=popular_data.get('book_name', []),
+        author=popular_data.get('author', []),
         image=images,
-        votes=list(popular_df['num_ratings'].values),
-        rating=[round(float(r), 2) for r in popular_df['avg_rating'].values]
+        votes=popular_data.get('votes', []),
+        rating=[round(float(r), 2) for r in popular_data.get('rating', [])]
     )
 
 @app.route('/recommend')
@@ -70,7 +64,7 @@ def suggest():
     if not query or len(query) < 2:
         return jsonify([])
     
-    matches = [title for title in pt.index if query.lower() in title.lower()]
+    matches = [title for title in pt_titles if query.lower() in title.lower()]
     return jsonify(matches[:10])
 
 @app.route('/recommend_books', methods=['POST'])
@@ -81,10 +75,10 @@ def recommend():
         return render_template('recommend.html', error="Please enter a book title.")
     
     matched_title = None
-    if user_input in pt.index:
+    if user_input in pt_titles:
         matched_title = user_input
     else:
-        possible_matches = [t for t in pt.index if user_input.lower() in t.lower()]
+        possible_matches = [t for t in pt_titles if user_input.lower() in t.lower()]
         if possible_matches:
             matched_title = possible_matches[0]
             
@@ -96,7 +90,7 @@ def recommend():
         )
 
     try:
-        index = np.where(pt.index == matched_title)[0][0]
+        index = pt_titles.index(matched_title)
         similar_items = sorted(
             list(enumerate(similarity_scores[index])), 
             key=lambda x: x[1], 
@@ -105,23 +99,20 @@ def recommend():
 
         data = []
         for i in similar_items:
-            item = []
-            temp_df = books[books['Book-Title'] == pt.index[i[0]]]
-            if temp_df.empty:
+            similar_book_title = pt_titles[i[0]]
+            book_info = books_dict.get(similar_book_title)
+            
+            if not book_info:
                 continue
                 
-            book_row = temp_df.drop_duplicates('Book-Title').iloc[0]
-            
-            title = book_row['Book-Title']
-            author = book_row['Book-Author']
-            
-            raw_image_url = book_row.get('Image-URL-L', book_row.get('Image-URL-M', ''))
+            title = book_info.get('Book-Title', similar_book_title)
+            author = book_info.get('Book-Author', 'Unknown Author')
+            raw_image_url = book_info.get('Image-URL-L', book_info.get('Image-URL-M', ''))
             image_url = get_hd_image(raw_image_url)
             
             match_percentage = round(float(i[1]) * 100, 1)
 
-            item.extend([title, author, image_url, match_percentage])
-            data.append(item)
+            data.append([title, author, image_url, match_percentage])
 
         return render_template(
             'recommend.html', 
