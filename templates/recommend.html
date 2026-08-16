@@ -1,0 +1,414 @@
+{% extends 'base.html' %}
+
+{% block title %}Get AI Recommendations | BookVerse{% endblock %}
+
+{% block extra_css %}
+<style>
+    .search-section {
+        max-width: 680px;
+        margin: 0 auto 4rem auto;
+        position: relative;
+    }
+
+    .search-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        padding: 2rem;
+        border-radius: 24px;
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        box-shadow: var(--card-shadow);
+    }
+
+    .search-form {
+        display: flex;
+        gap: 1rem;
+        position: relative;
+    }
+
+    .search-input-wrapper {
+        position: relative;
+        flex: 1;
+    }
+
+    .search-icon {
+        position: absolute;
+        left: 1.2rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-secondary);
+        font-size: 1.1rem;
+        pointer-events: none;
+    }
+
+    .search-input {
+        width: 100%;
+        padding: 1.1rem 1.2rem 1.1rem 3.2rem;
+        border-radius: 14px;
+        border: 1px solid var(--border-color);
+        background: var(--input-bg);
+        color: var(--text-primary);
+        font-size: 1.05rem;
+        outline: none;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .search-input:focus {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+    }
+
+    .submit-btn {
+        padding: 0 1.8rem;
+        border-radius: 14px;
+        border: none;
+        background: var(--gradient-primary);
+        color: white;
+        font-weight: 600;
+        font-size: 1rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        transition: transform 0.2s ease, opacity 0.2s ease;
+        white-space: nowrap;
+    }
+
+    .submit-btn:hover {
+        transform: scale(1.02);
+        opacity: 0.95;
+    }
+
+    /* Autocomplete Dropdown */
+    .autocomplete-list {
+        position: absolute;
+        top: calc(100% + 8px);
+        left: 0;
+        right: 0;
+        background: var(--dropdown-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 14px;
+        max-height: 280px;
+        overflow-y: auto;
+        z-index: 1000;
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+        display: none;
+    }
+
+    .autocomplete-item {
+        padding: 0.9rem 1.2rem;
+        cursor: pointer;
+        color: var(--text-primary);
+        font-size: 0.95rem;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        transition: background-color 0.15s ease;
+    }
+
+    .autocomplete-item:last-child {
+        border-bottom: none;
+    }
+
+    .autocomplete-item:hover, .autocomplete-item.selected {
+        background: rgba(99, 102, 241, 0.15);
+        color: #818cf8;
+    }
+
+    /* Alert Box */
+    .alert-box {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        color: #f87171;
+        padding: 1.2rem;
+        border-radius: 14px;
+        margin-bottom: 2rem;
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+    }
+
+    /* Results Header */
+    .results-header {
+        margin-bottom: 2rem;
+        animation: fadeIn 0.5s ease;
+    }
+
+    .results-title {
+        font-family: 'Outfit', sans-serif;
+        font-size: 1.6rem;
+        font-weight: 700;
+    }
+
+    .results-title span {
+        background: var(--gradient-primary);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    /* Grid */
+    .recommendations-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 2rem;
+        animation: fadeIn 0.6s ease;
+    }
+
+    .rec-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease;
+        position: relative;
+    }
+
+    .rec-card:hover {
+        transform: translateY(-8px);
+        box-shadow: var(--card-shadow);
+        border-color: rgba(168, 85, 247, 0.4);
+    }
+
+    .match-badge {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        background: var(--gradient-primary);
+        color: white;
+        font-weight: 700;
+        font-size: 0.75rem;
+        padding: 4px 10px;
+        border-radius: 9999px;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        z-index: 2;
+    }
+
+    .rec-cover-wrapper {
+        width: 100%;
+        height: 310px;
+        overflow: hidden;
+        background: #0f172a;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.5rem;
+    }
+
+    .rec-cover {
+        max-width: 100%;
+        max-height: 100%;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        transition: transform 0.4s ease;
+        image-rendering: -webkit-optimize-contrast;
+    }
+
+    .rec-card:hover .rec-cover {
+        transform: scale(1.06);
+    }
+
+    .rec-details {
+        padding: 1.2rem;
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        gap: 0.6rem;
+    }
+
+    .rec-title {
+        font-family: 'Outfit', sans-serif;
+        font-size: 1.05rem;
+        font-weight: 700;
+        line-height: 1.35;
+        color: var(--text-primary);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        height: 2.7rem;
+    }
+
+    .rec-author {
+        color: var(--text-secondary);
+        font-size: 0.88rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    @media (max-width: 640px) {
+        .search-form { flex-direction: column; }
+        .submit-btn { padding: 1rem; justify-content: center; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <div class="hero-badge">
+        <i class="fa-solid fa-wand-magic-sparkles"></i> AI Recommender Engine
+    </div>
+    <h1>Find Your Next <span>Favorite Book</span></h1>
+    <p>Type any book title below. Our machine learning collaborative filtering engine will find books read & loved by readers with matching tastes.</p>
+</div>
+
+<div class="search-section">
+    <div class="search-card">
+        <form action="/recommend_books" method="POST" class="search-form" id="searchForm">
+            <div class="search-input-wrapper">
+                <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                <input 
+                    type="text" 
+                    name="user_input" 
+                    id="searchInput"
+                    class="search-input" 
+                    placeholder="e.g. 1984, Harry Potter, The Hobbit..." 
+                    value="{{ user_input if user_input else '' }}"
+                    autocomplete="off"
+                    required
+                >
+                <div class="autocomplete-list" id="autocompleteList"></div>
+            </div>
+            <button type="submit" class="submit-btn" id="submitBtn">
+                <i class="fa-solid fa-sparkles"></i> Recommend
+            </button>
+        </form>
+    </div>
+</div>
+
+{% if error %}
+<div class="alert-box">
+    <i class="fa-solid fa-circle-exclamation" style="font-size: 1.3rem;"></i>
+    <div>{{ error }}</div>
+</div>
+{% endif %}
+
+{% if data %}
+<div class="results-header">
+    <h2 class="results-title">Top Recommendations for <span>"{{ user_input }}"</span></h2>
+</div>
+
+<div class="recommendations-grid">
+    {% for item in data %}
+    <div class="rec-card">
+        <div class="match-badge">
+            <i class="fa-solid fa-bolt"></i> {{ item[3] }}% Match
+        </div>
+        <div class="rec-cover-wrapper">
+            <img 
+                src="{{ item[2] }}" 
+                alt="{{ item[0] }}" 
+                class="rec-cover"
+                loading="lazy"
+                onerror="this.onerror=null; this.src='https://images.unsplash.com/photo-1543002588-bfa74002ed7e?auto=format&fit=crop&w=400&q=80';"
+            >
+        </div>
+        <div class="rec-details">
+            <h3 class="rec-title" title="{{ item[0] }}">{{ item[0] }}</h3>
+            <p class="rec-author"><i class="fa-regular fa-user"></i> {{ item[1] }}</p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const searchInput = document.getElementById('searchInput');
+    const autocompleteList = document.getElementById('autocompleteList');
+    let selectedIndex = -1;
+
+    // Debounce autocomplete fetches
+    let debounceTimer;
+    searchInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        const query = this.value.trim();
+
+        if (query.length < 2) {
+            autocompleteList.style.display = 'none';
+            return;
+        }
+
+        debounceTimer = setTimeout(() => {
+            fetch(`/api/suggest?q=${encodeURIComponent(query)}`)
+                .then(res => res.json())
+                .then(data => {
+                    renderAutocomplete(data);
+                })
+                .catch(err => console.error('Autocomplete error:', err));
+        }, 200);
+    });
+
+    function renderAutocomplete(suggestions) {
+        if (!suggestions || suggestions.length === 0) {
+            autocompleteList.style.display = 'none';
+            return;
+        }
+
+        selectedIndex = -1;
+        autocompleteList.innerHTML = suggestions.map(item => `
+            <div class="autocomplete-item" data-value="${escapeHtml(item)}">
+                <i class="fa-solid fa-book"></i> ${escapeHtml(item)}
+            </div>
+        `).join('');
+
+        autocompleteList.style.display = 'block';
+
+        document.querySelectorAll('.autocomplete-item').forEach(item => {
+            item.addEventListener('click', function() {
+                searchInput.value = this.getAttribute('data-value');
+                autocompleteList.style.display = 'none';
+                document.getElementById('searchForm').submit();
+            });
+        });
+    }
+
+    // Keyboard navigation
+    searchInput.addEventListener('keydown', function(e) {
+        const items = autocompleteList.querySelectorAll('.autocomplete-item');
+        if (autocompleteList.style.display === 'block' && items.length > 0) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                selectedIndex = (selectedIndex + 1) % items.length;
+                updateSelection(items);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                selectedIndex = (selectedIndex - 1 + items.length) % items.length;
+                updateSelection(items);
+            } else if (e.key === 'Enter' && selectedIndex >= 0) {
+                e.preventDefault();
+                items[selectedIndex].click();
+            }
+        }
+    });
+
+    function updateSelection(items) {
+        items.forEach((item, index) => {
+            if (index === selectedIndex) {
+                item.classList.add('selected');
+                item.scrollIntoView({ block: 'nearest' });
+            } else {
+                item.classList.remove('selected');
+            }
+        });
+    }
+
+    // Close dropdown on outside click
+    document.addEventListener('click', function(e) {
+        if (!searchInput.contains(e.target) && !autocompleteList.contains(e.target)) {
+            autocompleteList.style.display = 'none';
+        }
+    });
+
+    function escapeHtml(str) {
+        return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+</script>
+{% endblock %}
