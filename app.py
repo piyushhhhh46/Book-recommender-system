@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, jsonify
 import pickle
 import numpy as np
 import os
+import sys
 
 app = Flask(__name__)
 
@@ -9,25 +10,29 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def load_pickle(filename):
     path = os.path.join(BASE_DIR, filename)
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Pickle file not found: {path}")
     with open(path, 'rb') as f:
         return pickle.load(f)
 
-# Load updated pickle files
-popular_df = load_pickle('popular.pkl')
-pt = load_pickle('pt.pkl')
-books_file = 'books.pkl' if os.path.exists(os.path.join(BASE_DIR, 'books.pkl')) else 'book.pkl'
-books = load_pickle(books_file)
-similarity_scores = load_pickle('similarity_scores.pkl')
+# Load pickle artifacts safely
+try:
+    popular_df = load_pickle('popular.pkl')
+    pt = load_pickle('pt.pkl')
+    books_file = 'books.pkl' if os.path.exists(os.path.join(BASE_DIR, 'books.pkl')) else 'book.pkl'
+    books = load_pickle(books_file)
+    similarity_scores = load_pickle('similarity_scores.pkl')
+    print("All pickle models loaded successfully.")
+except Exception as e:
+    print(f"CRITICAL ERROR loading pickle files: {e}", file=sys.stderr)
+    raise e
 
 def get_hd_image(url):
     """Converts low/medium res Amazon image URLs to High-Res Large URLs and ensures HTTPS protocol."""
     if not isinstance(url, str) or not url:
         return 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?auto=format&fit=crop&w=600&q=80'
     
-    # Replace HTTP with HTTPS to avoid mixed content block
     url = url.replace('http://', 'https://')
-    
-    # Replace Small/Medium Amazon image tags with Large tag (.LZZZZZZZ.jpg)
     if '.MZZZZZZZ.jpg' in url:
         url = url.replace('.MZZZZZZZ.jpg', '.LZZZZZZZ.jpg')
     elif '.SZZZZZZZ.jpg' in url:
@@ -37,8 +42,14 @@ def get_hd_image(url):
 
 @app.route('/')
 def index():
-    # Process images to HD
-    images = [get_hd_image(img) for img in popular_df['Image-URL-L'].values] if 'Image-URL-L' in popular_df.columns else [get_hd_image(img) for img in popular_df['Image-URL-M'].values]
+    if 'Image-URL-L' in popular_df.columns:
+        raw_imgs = popular_df['Image-URL-L'].values
+    elif 'Image-URL-M' in popular_df.columns:
+        raw_imgs = popular_df['Image-URL-M'].values
+    else:
+        raw_imgs = [''] * len(popular_df)
+        
+    images = [get_hd_image(img) for img in raw_imgs]
     
     return render_template(
         'index.html',
@@ -46,7 +57,7 @@ def index():
         author=list(popular_df['Book-Author'].values),
         image=images,
         votes=list(popular_df['num_ratings'].values),
-        rating=[round(r, 2) for r in popular_df['avg_rating'].values]
+        rating=[round(float(r), 2) for r in popular_df['avg_rating'].values]
     )
 
 @app.route('/recommend')
@@ -104,11 +115,10 @@ def recommend():
             title = book_row['Book-Title']
             author = book_row['Book-Author']
             
-            # Select High-Res Image
-            raw_image_url = book_row['Image-URL-L'] if 'Image-URL-L' in book_row and isinstance(book_row['Image-URL-L'], str) else book_row['Image-URL-M']
+            raw_image_url = book_row.get('Image-URL-L', book_row.get('Image-URL-M', ''))
             image_url = get_hd_image(raw_image_url)
             
-            match_percentage = round(i[1] * 100, 1)
+            match_percentage = round(float(i[1]) * 100, 1)
 
             item.extend([title, author, image_url, match_percentage])
             data.append(item)
@@ -126,4 +136,5 @@ def recommend():
         )
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=True, host='0.0.0.0', port=port)
